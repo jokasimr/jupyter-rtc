@@ -152,3 +152,7 @@ docs/jupyter_execute
 ui-tests/playwright-report
 ui-tests/test-results
 ui-tests/ui-tests-app
+
+# jupyterlite
+*.doit.db
+_output
