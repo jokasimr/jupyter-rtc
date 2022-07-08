@@ -34,7 +34,7 @@ async function createModule(scope, module) {
 /**
  * The main entry point for the application.
  */
-async function main() {
+export async function main() {
   const mimeExtensions = await Promise.all(mimeExtensionsMods);
 
   let baseMods = [
@@ -81,7 +81,10 @@ async function main() {
     ),
     require('@jupyterlab/console-extension'),
     require('@jupyterlab/docmanager-extension').default.filter(({ id }) =>
-      ['@jupyterlab/docmanager-extension:plugin'].includes(id)
+      [
+        '@jupyterlab/docmanager-extension:plugin',
+        '@jupyterlab/docmanager-extension:manager'
+      ].includes(id)
     ),
     require('@jupyterlab/filebrowser-extension').default.filter(({ id }) =>
       [
@@ -126,6 +129,7 @@ async function main() {
     }
     case 'notebooks': {
       baseMods = baseMods.concat([
+        require('@jupyterlab/cell-toolbar-extension'),
         require('@jupyterlab/completer-extension').default.filter(({ id }) =>
           ['@jupyterlab/completer-extension:notebooks'].includes(id)
         ),
@@ -306,5 +310,3 @@ async function main() {
   await app.start();
   await app.restored;
 }
-
-main();

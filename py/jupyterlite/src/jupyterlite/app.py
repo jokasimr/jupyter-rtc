@@ -5,8 +5,9 @@ from jupyter_core.application import JupyterApp, base_aliases, base_flags
 from traitlets import Bool, Instance, Unicode, default
 
 from . import __version__
+from .addons.piplite import list_wheels
 from .config import LiteBuildConfig
-from .constants import NOARCH_WHL, PHASES
+from .constants import PHASES
 from .manager import LiteManager
 from .trait_types import CPath
 
@@ -98,6 +99,10 @@ class ManagedApp(BaseLiteApp):
             kwargs["output_dir"] = self.output_dir
         if self.mathjax_dir:
             kwargs["mathjax_dir"] = self.mathjax_dir
+        if self.file_types:
+            kwargs["file_types"] = self.file_types
+        if self.extra_file_types:
+            kwargs["extra_file_types"] = self.extra_file_types
         if self.contents:
             kwargs["contents"] = [Path(p) for p in self.contents]
         if self.ignore_contents:
@@ -143,7 +148,7 @@ class LiteDoitApp(ManagedApp):
 
     def start(self):
         super().start()
-        self.lite_manager.doit_run(*self._doit_cmd)
+        self.exit(self.lite_manager.doit_run(*self._doit_cmd))
 
 
 # special non-task apps
@@ -266,7 +271,7 @@ class PipliteIndex(DescribedMixin, JupyterApp):
     def start(self):
         if not self.wheel_dir.exists():
             raise ValueError(f"{self.wheel_dir} does not exist")
-        if not [*self.wheel_dir.glob(f"*{NOARCH_WHL}")]:
+        if not list_wheels(self.wheel_dir):
             raise ValueError(f"no wheels found in {self.wheel_dir}")
         from .addons.piplite import write_wheel_index
 

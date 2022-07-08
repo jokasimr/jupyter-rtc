@@ -864,16 +864,20 @@ class C:
     FED_EXT_MARKER = "### FEDERATED EXTENSIONS ###"
     RE_CONDA_FORGE_URL = r"/conda-forge/(.*/)?(noarch|linux-64|win-64|osx-64)/([^/]+)$"
     GH = "https://github.com"
-    CONDA_FORGE_RELEASE = f"{GH}/conda-forge/releases/releases/download"
+    CONDA_FORGE_RELEASE = "https://conda.anaconda.org/conda-forge"
     LITE_GH_ORG = f"{GH}/{NAME}"
     P5_GH_REPO = f"{LITE_GH_ORG}/p5-kernel"
     P5_MOD = "jupyterlite_p5_kernel"
     P5_VERSION = "0.1.0a12"
     P5_RELEASE = f"{P5_GH_REPO}/releases/download/v{P5_VERSION}"
     P5_WHL_URL = f"{P5_RELEASE}/{P5_MOD}-{P5_VERSION}-{NOARCH_WHL}"
+    PYTHON_HOSTED = "https://files.pythonhosted.org/packages"
+    PYPI = "https://pypi.org"
+    PYPI_API = f"{PYPI}/pypi"
+    PYPI_SRC = f"{PYPI}/packages/source"
     PYODIDE_GH = f"{GH}/pyodide/pyodide"
     PYODIDE_DOWNLOAD = f"{PYODIDE_GH}/releases/download"
-    PYODIDE_VERSION = "0.19.1"
+    PYODIDE_VERSION = "0.20.0"
     PYODIDE_JS = "pyodide.js"
     PYODIDE_ARCHIVE = f"pyodide-build-{PYODIDE_VERSION}.tar.bz2"
     PYODIDE_URL = os.environ.get(
@@ -896,6 +900,7 @@ class C:
         # magic JS interop layer
         "js",
         "pyodide_js",
+        "pyodide",
         # broken?
         "pathspec",
     ]
@@ -996,7 +1001,11 @@ class P:
     TYPEDOC_JSON = ROOT / "typedoc.json"
     TYPEDOC_CONF = [TSCONFIG_TYPEDOC, TYPEDOC_JSON]
     DOCS_SRC_MD = sorted(
-        [p for p in DOCS.rglob("*.md") if "docs/api/ts" not in str(p.as_posix())]
+        [
+            p
+            for p in DOCS.rglob("*.md")
+            if "docs/reference/api/ts" not in str(p.as_posix())
+        ]
     )
     DOCS_ENV = DOCS / "environment.yml"
     DOCS_PY = sorted([p for p in DOCS.rglob("*.py") if "jupyter_execute" not in str(p)])
@@ -1114,6 +1123,7 @@ class B:
     PYOLITE_WHEEL_INDEX = PYOLITE_WHEELS / "all.json"
     PYOLITE_WHEEL_TS = P.PYOLITE_TS / "src/_pypi.ts"
     PY_APP_PACK = P.ROOT / "py" / C.NAME / "src" / C.NAME / APP_PACK.name
+    REQ_CACHE = BUILD / "requests-cache.sqlite"
 
     EXAMPLE_DEPS = BUILD / "depfinder"
 
@@ -1135,10 +1145,10 @@ class B:
     # typedoc
     DOCS_RAW_TYPEDOC = BUILD / "typedoc"
     DOCS_RAW_TYPEDOC_README = DOCS_RAW_TYPEDOC / "README.md"
-    DOCS_TS = P.DOCS / "api/ts"
+    DOCS_TS = P.DOCS / "reference/api/ts"
     DOCS_TS_MYST_INDEX = DOCS_TS / "index.md"
     DOCS_TS_MODULES = [
-        P.ROOT / "docs/api/ts" / f"{p.parent.name}.md"
+        P.ROOT / "docs/reference/api/ts" / f"{p.parent.name}.md"
         for p in P.PACKAGE_JSONS
         if p.parent.name not in C.NO_TYPEDOC
     ]
@@ -1178,6 +1188,36 @@ class BB:
 
 
 class U:
+    _SESSION = None
+
+    @staticmethod
+    def session():
+        try:
+            import requests_cache
+
+            HAS_REQUESTS_CACHE = True
+        except Exception as err:
+            print(f"requests_cache not available: {err}")
+            HAS_REQUESTS_CACHE = False
+
+        if U._SESSION is None:
+            if HAS_REQUESTS_CACHE:
+                if not B.BUILD.exists():
+                    B.BUILD.mkdir()
+
+                U._SESSION = requests_cache.CachedSession(
+                    str(B.BUILD / B.REQ_CACHE.stem),
+                    allowable_methods=["GET", "POST", "HEAD"],
+                    allowable_codes=[200, 302, 404],
+                )
+            else:
+                import requests
+
+                U._SESSION = requests.Session()
+                print("Using uncached requests session, not recommended")
+
+        return U._SESSION
+
     @staticmethod
     def do(*args, cwd=P.ROOT, **kwargs):
         """wrap a CmdAction for consistency (e.g. on windows)"""
@@ -1214,28 +1254,35 @@ class U:
     @staticmethod
     def get_deps(has_deps, dep_file):
         """look for deps with depfinder"""
-        out = "{}"
-
-        try:
-            out = subprocess.check_output(
-                [
-                    which("depfinder"),
-                    "--no-remap",
-                    "--yaml",
-                    "--key",
-                    "required",
-                    has_deps,
-                ]
-            ).decode("utf-8")
-        except subprocess.CalledProcessError:
-            print(has_deps, "probably isn't python")
+        args = [
+            which("depfinder"),
+            "--no-remap",
+            "--yaml",
+            "--key",
+            "required",
+            has_deps,
+        ]
+        proc = subprocess.Popen(args, stdout=subprocess.PIPE, stderr=subprocess.PIPE)
+        if proc.wait() == 0:
+            out = proc.stdout.read().decode("utf-8")
+        else:
+            print(f"   ... {has_deps.relative_to(P.ROOT)} probably isn't python...")
+            out = "{}"
 
         dep_file.write_text(out, **C.ENC)
 
     @staticmethod
     def sync_lite_config(from_env, to_json, marker, extra_urls, all_deps):
         """use conda list to derive tarball names for federated_extensions"""
-        raw_lock = subprocess.check_output([which("conda"), "list", "--explicit"])
+        try:
+            # try with conda first
+            raw_lock = subprocess.check_output([which("conda"), "list", "--explicit"])
+        except:
+            # try with micromamba
+            raw_lock = subprocess.check_output(
+                [os.getenv("MAMBA_EXE"), "env", "export", "--explicit"]
+            )
+
         ext_packages = [
             p.strip().split(" ")[0]
             for p in from_env.read_text(**C.ENC).split(marker)[1].split(" - ")
@@ -1254,9 +1301,7 @@ class U:
 
             for ext in ext_packages:
                 if pkg.startswith(ext):
-                    tarball_urls += [
-                        "/".join([C.CONDA_FORGE_RELEASE, subdir, pkg, pkg])
-                    ]
+                    tarball_urls += ["/".join([C.CONDA_FORGE_RELEASE, subdir, pkg])]
 
         config = json.loads(to_json.read_text(**C.ENC))
         config["LiteBuildConfig"]["federated_extensions"] = sorted(set(tarball_urls))
@@ -1317,19 +1362,32 @@ class U:
 
     @staticmethod
     def pip_url(name, version, wheel_name):
+        """calculate and verify a "predictable" wheel name, or calculate it the hard way"""
         python_tag = "py3" if "py2." not in wheel_name else "py2.py3"
 
         if name == "testpath":
             python_tag = "py2.py3"
 
-        return "/".join(
-            [
-                "https://files.pythonhosted.org/packages",
-                python_tag,
-                name[0],
-                name,
-                wheel_name,
-            ]
+        url = "/".join([C.PYTHON_HOSTED, python_tag, name[0], name, wheel_name])
+
+        print(".", end="", flush=True)
+        r = U.session().head(url)
+
+        if r.status_code < 400:
+            print(".", end="", flush=True)
+            return url
+
+        dists = U.session().get(f"{C.PYPI_API}/{name}/json").json()["releases"][version]
+        print("!", end="", flush=True)
+        for dist in dists:
+            if dist.get("yanked"):
+                continue
+            if dist["filename"] == wheel_name:
+                return dist["url"]
+
+        raise ValueError(
+            f"Couldn't figure out simple or canonical URL for {wheel_name}: try"
+            " deleting `build/requests-cache.sqlite` and running again"
         )
 
     @staticmethod
@@ -1644,13 +1702,10 @@ class U:
 
     @staticmethod
     def fetch_pyodide_packages():
-        import urllib.request
-
         schema = json.loads(P.APP_SCHEMA.read_text(**C.ENC))
         props = schema["definitions"]["pyolite-settings"]["properties"]
         url = props["pyodideUrl"]["default"].replace(C.PYODIDE_JS, "packages.json")
-        with urllib.request.urlopen(url) as response:
-            packages = json.loads(response.read().decode("utf-8"))
+        packages = U.session().get(url).json()
         B.PYODIDE_PACKAGES.parent.mkdir(exist_ok=True, parents=True)
         B.PYODIDE_PACKAGES.write_text(json.dumps(packages, **C.JSON))
 

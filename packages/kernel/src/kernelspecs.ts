@@ -1,20 +1,13 @@
+import { PageConfig } from '@jupyterlab/coreutils';
+
 import { KernelSpec } from '@jupyterlab/services';
 
-import { IKernel, IKernelSpecs } from './tokens';
+import { IKernel, IKernelSpecs, FALLBACK_KERNEL } from './tokens';
 
 /**
  * A class to handle requests to /api/kernelspecs
  */
 export class KernelSpecs implements IKernelSpecs {
-  /**
-   * Construct a new KernelSpecs.
-   *
-   * @param options The instantiation options.
-   */
-  constructor(options: KernelSpecs.IOptions) {
-    // no-op
-  }
-
   /**
    * Get the kernel specs.
    */
@@ -22,10 +15,26 @@ export class KernelSpecs implements IKernelSpecs {
     if (this._specs.size === 0) {
       return null;
     }
+
     return {
-      default: 'python',
+      default: this.defaultKernelName,
       kernelspecs: Object.fromEntries(this._specs),
     };
+  }
+
+  /**
+   * Get the default kernel name.
+   */
+  get defaultKernelName(): string {
+    let defaultKernelName = PageConfig.getOption('defaultKernelName');
+
+    if (!defaultKernelName && this._specs.size) {
+      const keys = Array.from(this._specs.keys());
+      keys.sort();
+      defaultKernelName = keys[0];
+    }
+
+    return defaultKernelName || FALLBACK_KERNEL;
   }
 
   /**
@@ -54,11 +63,6 @@ export class KernelSpecs implements IKernelSpecs {
  * A namespace for KernelSpecs statics.
  */
 export namespace KernelSpecs {
-  /**
-   * The instantiation options for a KernelSpecs
-   */
-  export interface IOptions {}
-
   /**
    * Registration options for a new kernel.
    */

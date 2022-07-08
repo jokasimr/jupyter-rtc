@@ -3,14 +3,18 @@
 
 import { PageConfig, URLExt } from '@jupyterlab/coreutils';
 
-import { JupyterLiteServer, JupyterLiteServerPlugin } from '@jupyterlite/server';
+import {
+  IServiceWorkerRegistrationWrapper,
+  JupyterLiteServer,
+  JupyterLiteServerPlugin,
+} from '@jupyterlite/server';
 
 import { IKernel, IKernelSpecs } from '@jupyterlite/kernel';
 
 /**
  * The default CDN fallback for Pyodide
  */
-const PYODIDE_CDN_URL = 'https://cdn.jsdelivr.net/pyodide/v0.19.1/full/pyodide.js';
+const PYODIDE_CDN_URL = 'https://cdn.jsdelivr.net/pyodide/v0.20.0/full/pyodide.js';
 
 /**
  * The id for the extension, and key in the litePlugins.
@@ -23,8 +27,12 @@ const PLUGIN_ID = '@jupyterlite/pyolite-kernel-extension:kernel';
 const kernel: JupyterLiteServerPlugin<void> = {
   id: PLUGIN_ID,
   autoStart: true,
-  requires: [IKernelSpecs],
-  activate: (app: JupyterLiteServer, kernelspecs: IKernelSpecs) => {
+  requires: [IKernelSpecs, IServiceWorkerRegistrationWrapper],
+  activate: (
+    app: JupyterLiteServer,
+    kernelspecs: IKernelSpecs,
+    serviceWorkerRegistrationWrapper: IServiceWorkerRegistrationWrapper
+  ) => {
     const baseUrl = PageConfig.getBaseUrl();
     const config =
       JSON.parse(PageConfig.getOption('litePluginSettings') || '{}')[PLUGIN_ID] || {};
@@ -37,17 +45,9 @@ const kernel: JupyterLiteServerPlugin<void> = {
     kernelspecs.register({
       spec: {
         name: 'python',
-        display_name: 'Pyolite',
+        display_name: 'Python (Pyodide)',
         language: 'python',
         argv: [],
-        spec: {
-          argv: [],
-          env: {},
-          display_name: 'Pyolite',
-          language: 'python',
-          interrupt_mode: 'message',
-          metadata: {},
-        },
         resources: {
           'logo-32x32': 'TODO',
           'logo-64x64': URLExt.join(baseUrl, '/kernelspecs/python.png'),
@@ -61,6 +61,7 @@ const kernel: JupyterLiteServerPlugin<void> = {
           pyodideUrl,
           pipliteUrls,
           disablePyPIFallback,
+          mountDrive: serviceWorkerRegistrationWrapper.enabled,
         });
       },
     });

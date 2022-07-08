@@ -34,7 +34,7 @@ async function createModule(scope, module) {
 /**
  * The main entry point for the application.
  */
-async function main() {
+export async function main() {
   const mimeExtensions = await Promise.all(mimeExtensionsMods);
 
   let baseMods = [
@@ -223,7 +223,7 @@ async function main() {
   const { SingleWidgetApp } = require('@jupyterlite/application');
   const app = new SingleWidgetApp({ serviceManager, mimeExtensions });
 
-  app.name = PageConfig.getOption('appName') || 'ConsoLite';
+  app.name = PageConfig.getOption('appName') || 'REPLite';
 
   app.registerPluginModules(mods);
 
@@ -238,5 +238,3 @@ async function main() {
   await app.start();
   await app.restored;
 }
-
-main();

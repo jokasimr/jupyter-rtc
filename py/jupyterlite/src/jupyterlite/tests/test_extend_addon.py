@@ -13,15 +13,16 @@ def test_extend_addon_config(an_empty_lite_dir, a_configured_mock_addon, capsys)
     app.initialize()
     manager = app.lite_manager
 
-    assert manager.ignore_sys_prefix, "didn't configure"
-
     addon = manager._addons["mock"]
     assert addon.parent == manager, "not the parent"
 
     assert addon.some_feature == 42, "didn't configure"
 
-    app.start()
+    with pytest.raises(SystemExit) as exit:
+        app.start()
 
+    assert exit.type == SystemExit
+    assert exit.value.code == 0
     cap = capsys.readouterr()
     assert "hello world" in cap.out
 
@@ -29,7 +30,7 @@ def test_extend_addon_config(an_empty_lite_dir, a_configured_mock_addon, capsys)
 @pytest.fixture
 def a_configured_mock_addon(a_mock_addon, an_empty_lite_dir, monkeypatch):
     config = {
-        "LiteBuildConfig": {"ignore_sys_prefix": True},
+        "LiteBuildConfig": {"ignore_sys_prefix": ["federated_extensions"]},
         "MockAddon": {"some_feature": 42},
     }
     conf = an_empty_lite_dir / "jupyter_lite_config.json"

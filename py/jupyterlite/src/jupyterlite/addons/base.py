@@ -7,7 +7,7 @@ import time
 import warnings
 from pathlib import Path
 
-from traitlets import Instance
+from traitlets import Bool, Instance
 from traitlets.config import LoggingConfigurable
 
 from ..constants import (
@@ -32,6 +32,8 @@ class BaseAddon(LoggingConfigurable):
     """
 
     manager: LiteManager = Instance(LiteManager)
+
+    ignore_sys_prefix: bool = Bool(False)
 
     def __init__(self, manager, *args, **kwargs):
         kwargs["parent"] = manager
@@ -83,12 +85,6 @@ class BaseAddon(LoggingConfigurable):
 
         if not dest.parent.exists():
             dest.parent.mkdir(parents=True)
-
-        if "anaconda.org/" in url:  # pragma: no cover
-            self.log.error(
-                f"[lite][fetch] cannot reliably download from anaconda.org {url}"
-            )
-            return False
 
         with tempfile.TemporaryDirectory() as td:
             tdp = Path(td)
@@ -176,10 +172,6 @@ class BaseAddon(LoggingConfigurable):
     def merge_one_jupyterlite(self, out_path, in_paths):
         """write the ``out_path`` with the merge content of ``in_paths``, where
         all are valid ``jupyter-lite.*`` files.
-
-        .. todo::
-
-            Notebooks
         """
         self.log.debug(f"[lite][config][merge] {out_path}")
         config = None
@@ -230,6 +222,8 @@ class BaseAddon(LoggingConfigurable):
         else:
             out_path.write_text(json.dumps(config, **JSON_FMT), **UTF8)
 
+        print("MERGED", out_path, "from", in_paths)
+
     def merge_jupyter_config_data(self, config, in_config):
         """merge well-known ``jupyter-config-data`` fields"""
         self.log.debug(f"""[lite][config][merge] ..... {config}""")
@@ -276,3 +270,6 @@ class BaseAddon(LoggingConfigurable):
                     is_ignored = True
                     break
         return is_ignored
+
+    def is_sys_prefix_ignored(self):
+        return self.ignore_sys_prefix
